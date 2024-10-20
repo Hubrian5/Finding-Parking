@@ -45,48 +45,73 @@ video_capture = cv2.VideoCapture('footage.mp4')
 frame_width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
 frame_height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
 fps = video_capture.get(cv2.CAP_PROP_FPS)
+total_frames = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))  # Get total frame count
 
-# Define the destination points for the warped frame
-# These points represent the corners of the desired output (straightened) frame
+# Define the destination points for the warped frame (same as original frame size)
 dst_points = np.float32([[0, 0], [frame_width, 0], [frame_width, frame_height], [0, frame_height]])
+
+# Compute the homography matrix using manually selected points
+h_matrix, _ = cv2.findHomography(ref_points, dst_points)
+
+# Preview the warped result using the first frame
+ret, first_frame = video_capture.read()
+if ret:
+    # Warp the first frame to preview the transformation
+    preview_warped_frame = cv2.warpPerspective(first_frame, h_matrix, (frame_width, frame_height))
+
+    # Resize the preview frame to 1920x1080 for display
+    preview_resized = cv2.resize(preview_warped_frame, (1920, 1080))
+
+    # Display the resized warped frame preview
+    cv2.imshow('Warped Preview', preview_resized)
+    print("Press any key to continue or 'q' to exit.")
+    
+    # Wait for user to press any key to continue with processing or 'q' to exit
+    key = cv2.waitKey(0) & 0xFF
+    if key == ord('q'):
+        print("Processing cancelled by user.")
+        video_capture.release()
+        cv2.destroyAllWindows()
+        exit()
+
+cv2.destroyWindow("Warped Preview")
+
+# Reset the video capture to start processing from the first frame
+video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
 # Define codec and create a VideoWriter object to save the output video
 output_filename = 'output_video.mp4'
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec
 output_video = cv2.VideoWriter(output_filename, fourcc, fps, (frame_width, frame_height))
 
-# Compute the homography matrix using manually selected points
-h_matrix, _ = cv2.findHomography(ref_points, dst_points)
+# Initialize a frame counter
+frame_count = 0
 
-# Main loop to process video frames
+# Main loop to process video frames and show progress
 while video_capture.isOpened():
     ret, frame = video_capture.read()
     if not ret:
         break  # Exit when video finishes
 
-    # Warp the video frame using the manually calculated homography matrix
+    # Warp the original frame using the manually calculated homography matrix
     warped_frame = cv2.warpPerspective(frame, h_matrix, (frame_width, frame_height))
 
     # Write the warped frame to the output video
     output_video.write(warped_frame)
 
-    # Resize the warped frame for display to 1920x1080
-    display_frame = cv2.resize(warped_frame, (1920, 1080))
+    # Update and print progress
+    frame_count += 1
+    progress = (frame_count / total_frames) * 100
+    print(f"Processing: {progress:.2f}% complete", end='\r')
 
-    # Display the warped frame in a 1920x1080 window
-    cv2.imshow('Warped Video', display_frame)
-
-    # Press 'q' to exit the preview window
+    # Check for manual stop ('q' to quit)
     if cv2.waitKey(1) & 0xFF == ord('q'):
+        print("\nProcessing stopped by user.")
         break
 
-    # Or check if the window is closed manually
-    if cv2.getWindowProperty('Warped Video', cv2.WND_PROP_VISIBLE) < 1:
-        break
-
-# Release video capture, writer, and close windows
+# Release video capture, writer, and close any remaining windows
 video_capture.release()
 output_video.release()
 cv2.destroyAllWindows()
 
-print(f"Processed video saved as {output_filename}")
+print(f"\nProcessed video saved as {output_filename}")
